@@ -63,39 +63,42 @@ int main()
 }
 
 //MONTE CARLO
-#include<stdio.h>
-#include<omp.h>
-#include<stdlib.h>
-#include<time.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <omp.h>
+#include <time.h>
 
-void monteCarlo(int N, int K)
-{
-        double x, y, d;
-        int i = 0, pCircle = 0, pSquare = 0;
-        #pragma omp parallel firstprivate(x, y, d, i) reduction(+: pCircle, pSquare) num_threads(K)
-        {
-                srand48((int)time(NULL));
-                for(i=0; i<N; i++)
-                {
-                        x = (double)drand48();
-                        y = (double)drand48();
-                        d = ((x*x) + (y*y));
-                        if(d<=1)
-                        {
-                                pCircle++;
-                        }
-                        pSquare;
-                }
+void monteCarlo(int N, int K) {
+    double x, y, d;
+    int i, pCircle = 0, pSquare = 0;
+
+    #pragma omp parallel private(x, y, d, i) reduction(+: pCircle, pSquare) num_threads(K)
+    {
+        // Thread-local seed (unique for each thread)
+        unsigned int seed = time(NULL) + omp_get_thread_num();
+
+        #pragma omp for
+        for (i = 0; i < N; i++) {
+            x = (double)rand() / RAND_MAX;
+            y = (double)rand() / RAND_MAX;
+            d = (x * x) + (y * y);
+
+            if (d <= 1) {
+                pCircle++;
+            }
+            pSquare++;
         }
-        double pi = 4.0; ((double)pCircle/(double)(pSquare));
-        printf("Pi value: %f", pi);
+    }
+
+    double pi = 4.0 * ((double)pCircle / (double)pSquare);
+    printf("Estimated Pi Value: %f\n", pi);
 }
 
-int main()
-{
-        int N = 100000;
-        int K = 8;
-        monteCarlo(N, K);
+int main() {
+    int N = 10000000; // Increase for better accuracy
+    int K = 8; // Number of threads
+    monteCarlo(N, K);
+    return 0;
 }
 
 //DINING PHILOSOPHER
