@@ -1,0 +1,394 @@
+// Create the new matrix where each entry is 10 times the previous entry in the matrix
+    #pragma omp parallel for
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            if (j == 0) {
+                result[i][j] = matrix[i][j];  // First element in each row stays the same
+            } else {
+                result[i][j] = 10 * matrix[i][j-1];  // 10 times the previous matrix entry
+            }
+        }
+    }
+
+// Create the new matrix where each entry is the sum of that row
+    #pragma omp parallel for
+    for (int i = 0; i < 3; i++) {
+        int sum = 0;
+        for (int j = 0; j < 3; j++) {
+            sum += matrix[i][j]; // Sum the elements in each row
+        }
+        // Assign the sum to each entry in the result row
+        for (int j = 0; j < 3; j++) {
+            result[i][j] = sum; //new matrix
+        }
+    }
+
+// Create the new matrix where each entry is the sum of that column
+    #pragma omp parallel for
+    for (int j = 0; j < 3; j++) {
+        int sum = 0;
+        // Calculate sum of each column
+        for (int i = 0; i < 3; i++) {
+            sum += matrix[i][j]; // Sum the elements in each column
+        }
+        // Assign the sum to each entry in the result column
+        for (int i = 0; i < 3; i++) {
+            result[i][j] = sum;
+        }
+    }
+
+//SUM 100000
+#include <stdio.h>
+#include <omp.h>
+
+int main()
+{
+    int n = 9999999;
+    long long sum = 0;
+
+    //printf("Enter n: ");
+    //scanf("%d", &n);
+
+    omp_set_num_threads(5);
+    #pragma omp parallel for
+    for(int i = 1; i <= n; i++)
+    {
+        #pragma omp critical
+        {
+            sum += i;
+        }
+    }
+
+    printf("Sum of first %d natural numbers: %lld\n", n, sum);
+}
+
+//MONTE CARLO
+#include<stdio.h>
+#include<omp.h>
+#include<stdlib.h>
+#include<time.h>
+
+void monteCarlo(int N, int K)
+{
+        double x, y, d;
+        int i = 0, pCircle = 0, pSquare = 0;
+        #pragma omp parallel firstprivate(x, y, d, i) reduction(+: pCircle, pSquare) num_threads(K)
+        {
+                srand48((int)time(NULL));
+                for(i=0; i<N; i++)
+                {
+                        x = (double)drand48();
+                        y = (double)drand48();
+                        d = ((x*x) + (y*y));
+                        if(d<=1)
+                        {
+                                pCircle++;
+                        }
+                        pSquare;
+                }
+        }
+        double pi = 4.0; ((double)pCircle/(double)(pSquare));
+        printf("Pi value: %f", pi);
+}
+
+int main()
+{
+        int N = 100000;
+        int K = 8;
+        monteCarlo(N, K);
+}
+
+//DINING PHILOSOPHER
+#include <stdio.h>
+#include <stdlib.h>
+#include <omp.h>
+#include <unistd.h>
+
+#define N 5  // Number of philosophers
+
+omp_lock_t forks[N];  // Locks for forks
+
+void philosopher(int id) {
+    int left = id;              // Left fork
+    int right = (id + 1) % N;   // Right fork
+
+    // Deadlock prevention: Last philosopher picks right fork first
+    if (id == N - 1) {
+        int temp = left;
+        left = right;
+        right = temp;
+    }
+
+    for (int i = 0; i < 3; i++) {  // Each philosopher eats 3 times
+        printf("Philosopher %d is thinking...\n", id);
+        sleep(1);
+
+        // Pick up left fork
+        omp_set_lock(&forks[left]);
+        printf("Philosopher %d picked up left fork (%d)\n", id, left);
+
+        // Pick up right fork
+        omp_set_lock(&forks[right]);
+        printf("Philosopher %d picked up right fork (%d) and is eating\n", id, right);
+
+        sleep(2);  // Eating time
+
+        // Put down right fork
+        omp_unset_lock(&forks[right]);
+        printf("Philosopher %d put down right fork (%d)\n", id, right);
+
+        // Put down left fork
+	omp_unset_lock(&forks[left]);
+        printf("Philosopher %d put down left fork (%d) and is thinking again\n", id, left);
+    }
+}
+
+int main() {
+    // Initialize locks (forks)
+    for (int i = 0; i < N; i++) {
+        omp_init_lock(&forks[i]);
+    }
+
+    // Run philosophers in parallel
+    #pragma omp parallel num_threads(N)
+    {
+        int id = omp_get_thread_num();
+        philosopher(id);
+    }
+
+    // Destroy locks
+    for (int i = 0; i < N; i++) {
+        omp_destroy_lock(&forks[i]);
+    }
+
+    return 0;
+}
+
+//READERS WRITERS
+#include <stdio.h>
+#include <stdlib.h>
+#include <omp.h>
+#include <unistd.h>
+
+#define NUM_READERS 5
+#define NUM_WRITERS 2
+
+int shared_data = 0;  // Shared resource
+int reader_count = 0; // Number of active readers
+
+omp_lock_t write_lock;  // Lock for writing
+
+void reader(int id) {
+    for (int i = 0; i < 3; i++) {  // Each reader reads 3 times
+        sleep(1);
+
+        #pragma omp critical  // Ensure correct reader count update
+        {
+            reader_count++;
+            if (reader_count == 1) {
+                omp_set_lock(&write_lock); // First reader locks writing
+            }
+        }
+
+        printf("Reader %d reads shared data: %d\n", id, shared_data);
+        sleep(1); // Simulate reading time
+
+        #pragma omp critical
+        {
+            reader_count--;
+            if (reader_count == 0) {
+                omp_unset_lock(&write_lock); // Last reader unlocks writing
+            }
+        }
+    }
+}
+
+void writer(int id) {
+    for (int i = 0; i < 2; i++) {  // Each writer writes 2 times
+        sleep(2);
+
+        omp_set_lock(&write_lock);  // Lock writing
+        shared_data += 10;  // Modify shared resource
+        printf("Writer %d updated shared data to: %d\n", id, shared_data);
+        sleep(2); // Simulate writing time
+        omp_unset_lock(&write_lock); // Unlock writing
+    }
+}
+
+int main() {
+    omp_init_lock(&write_lock);  // Initialize writer lock
+
+    #pragma omp parallel num_threads(NUM_READERS + NUM_WRITERS)
+    {
+        int id = omp_get_thread_num();
+        if (id < NUM_READERS) {
+            reader(id);  // Assign reader threads
+        } else {
+            writer(id - NUM_READERS);  // Assign writer threads
+        }
+    }
+
+    omp_destroy_lock(&write_lock);  // Destroy lock
+    return 0;
+}
+
+//MATRIX EQN
+#include <stdio.h>
+#include <omp.h>
+
+int main() {
+    int matrix[3][3], result[3][3];
+
+    // Get input for the 3x3 matrix
+    printf("Enter the elements of the 3x3 matrix:\n");
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            scanf("%d", &matrix[i][j]);
+        }
+    }
+
+    // Create the new matrix where each entry is 10 times the previous entry in the matrix
+    #pragma omp parallel for
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            if (j == 0) {
+                result[i][j] = matrix[i][j];  // First element in each row stays the same
+            } else {
+                result[i][j] = 10 * matrix[i][j-1];  // 10 times the previous matrix entry
+            }
+        }
+    }
+
+    // Print the original matrix
+    printf("\nOriginal 3x3 matrix:\n");
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            printf("%d ", matrix[i][j]);
+        }
+        printf("\n");
+    }
+
+    // Print the result matrix
+    printf("\nNew 3x3 matrix (each entry is 10 times the previous entry):\n");
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 3; j++) {
+            printf("%d ", result[i][j]);
+        }
+        printf("\n");
+    }
+
+    return 0;
+}
+
+//MATRIX SUM PARTITION
+#include<stdio.h>
+#include<omp.h>
+
+void main()
+{
+        int N, i, j;
+        printf("Enter size of matrix:");
+        scanf("%d", &N);
+        int matrix[N][N];
+        printf("Enter matrix elements: \n");
+        for(i = 0; i < N; i++)
+        {
+                for(j = 0; j < N; j++)
+                {
+                        scanf("%d", &matrix[i][j]);
+                }
+        }
+        printf("Input matrix: \n");
+        for(i = 0; i < N; i++)
+        {
+                for(j = 0; j < N; j++)
+                {
+                        printf("%d", matrix[i][j]);
+                }
+        printf("\n");
+        }
+        int sumA = 0, sumB = 0, sumC = 0, sumD = 0;
+        #pragma omp parallel sections reduction(+:sumA, sumB, sumC, sumD)
+        {
+                #pragma omp section
+                {
+                        for(i=0; i<N/2; i++)
+                        {
+                                for(j=0; j<N/2; j++)
+                                {
+                                        sumA+=matrix[i][j];
+                                }
+                        }
+                }
+                #pragma omp section
+                {
+                        for(i=0; i<N/2; i++)
+                        {
+                                for(j=N/2; j<N; j++)
+                                {
+                                        sumB+=matrix[i][j];
+                                }
+                        }
+                }
+                #pragma omp section
+                {
+                        for(i=N/2; i<N; i++)
+                        {
+                                for(j=0; j<N/2; j++)
+                                {
+                                        sumC+=matrix[i][j];
+                                }
+                        }
+                }
+                #pragma omp section
+                {
+                        for(i=N/2; i<N; i++)
+                        {
+                                for(j=N/2; j<N; j++)
+                                {
+                                        sumD+=matrix[i][j];
+                                }
+                        }
+                }
+        }
+        printf("SumA= %d", sumA);
+        printf("SumB= %d", sumB);
+        printf("SumC= %d", sumC);
+        printf("SumD= %d", sumD);
+}
+
+//MATRIX TRACE
+#include<stdio.h>
+#include<omp.h>
+
+void main()
+{
+        int N, i, j;
+        printf("Enter size of matrix: \n");
+        scanf("%d", &N);
+        int matrix[N][N];
+        printf("Enter matrix elements: \n");
+        for(i=0; i<N; i++)
+        {
+                for(j=0; j<N; j++)
+                {
+                        scanf("%d", &matrix[i][j]);
+                }
+        }
+        printf("Input matrix: \n");
+        for(i=0; i <N; i++)
+        {
+                for(j=0; j<N; j++)
+                {
+                        printf("%d", matrix[i][j]);
+                }
+                printf("\n");
+        }
+        int trace = 0;
+        #pragma omp parallel for reduction(+:trace)
+        for(i=0; i<N; i++)
+        {
+                trace+=matrix[i][i];
+        }
+        printf("Trace of matrix: %d", trace);
+}
